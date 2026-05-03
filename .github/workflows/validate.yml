@@ -1,0 +1,23 @@
+name: Validate lessons
+
+on:
+  pull_request:
+    paths:
+      - "lessons/**"
+      - "scripts/validate.mjs"
+      - ".github/workflows/validate.yml"
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate lesson frontmatter + injection scan
+        run: node scripts/validate.mjs --dir lessons:community

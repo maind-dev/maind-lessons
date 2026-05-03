@@ -1,0 +1,49 @@
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+
+Copyright (c) 2026 maind contributors
+
+This license applies to the **lesson content** in this repository: all files
+under `lessons/` and any derivative documentation that quotes from those files.
+
+The full legal text is available at:
+  https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+A human-readable summary is at:
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+In short:
+
+- **Attribution (BY)** — You must give appropriate credit, provide a link to
+  the license, and indicate if changes were made. You may do so in any
+  reasonable manner, but not in any way that suggests the licensor endorses
+  you or your use.
+
+- **ShareAlike (SA)** — If you remix, transform, or build upon the material,
+  you must distribute your contributions under the same license as the
+  original.
+
+- **No additional restrictions** — You may not apply legal terms or
+  technological measures that legally restrict others from doing anything the
+  license permits.
+
+## Promotion to curated
+
+Maintainers may select community lessons for editorial revision into the
+curated tier (separate proprietary repository, see `CONTRIBUTING.md` and
+the maind privacy/terms documentation). The original community version
+remains under CC BY-SA 4.0 here; the redacted curated version may be
+distributed under the proprietary terms of the curated repository.
+
+When a lesson is promoted, the curated version retains an `attribution`
+frontmatter block referencing the original community lesson id, original
+author, and source repository — preserving Stack-Overflow-style attribution.
+
+## Tooling vs. content
+
+The **tooling** in this repository (under `scripts/`, `.github/`, `schema/`,
+and root configuration files) is licensed under MIT — see `LICENSE`.
+
+By contributing to this repository, you license your contribution under
+CC BY-SA 4.0 (for content under `lessons/`) and MIT (for any tooling changes),
+as attested by your `Signed-off-by:` Developer Certificate of Origin in each
+commit (see `CONTRIBUTING.md`).

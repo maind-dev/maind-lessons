@@ -1,0 +1,12 @@
+{
+  "name": "maind-lessons",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Community-maintained library of debugging lessons and workflow notes for AI coding agents.",
+  "scripts": {
+    "validate": "node scripts/validate.mjs --dir lessons:community"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
