@@ -29,8 +29,12 @@ const ALLOWED_TYPES = new Set([
   "template",
 ]);
 const ALLOWED_TIERS = new Set(["community", "curated"]);
-const ID_RE_LESSON = /^lsn_\d{4}_[a-z0-9_]+$/;
-const ID_RE_TEMPLATE = /^tmpl_\d{4}_[a-z0-9_]+$/;
+// ALT:
+//const ID_RE_LESSON = /^lsn_\d{4}_[a-z0-9_]+$/;
+//const ID_RE_TEMPLATE = /^tmpl_\d{4}_[a-z0-9_]+$/;
+// NEU:
+const ID_RE_LESSON = /^lsn_[a-z0-9]+(?:_[a-z0-9]+)+$/;
+const ID_RE_TEMPLATE = /^tmpl_[a-z0-9]+(?:_[a-z0-9]+)+$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SKIP_FILES = new Set(["readme.md"]);
 
