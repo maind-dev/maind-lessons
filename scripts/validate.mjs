@@ -21,6 +21,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { argv, exit } from "node:process";
+import matter from "gray-matter";
 
 const ALLOWED_TYPES = new Set([
   "debugging_lesson",
@@ -29,10 +30,11 @@ const ALLOWED_TYPES = new Set([
   "template",
 ]);
 const ALLOWED_TIERS = new Set(["community", "curated"]);
-// ALT:
-//const ID_RE_LESSON = /^lsn_\d{4}_[a-z0-9_]+$/;
-//const ID_RE_TEMPLATE = /^tmpl_\d{4}_[a-z0-9_]+$/;
-// NEU:
+// Slug-based IDs (numbering deprecated; the leading \d{4}_ requirement was a
+// legacy convention not carried over everywhere). Pattern matches the active
+// system convention (MCP tools.ts, dashboard actions): lsn_/tmpl_ + at least
+// two underscore-separated lowercase-alnum tokens. Legacy numbered IDs like
+// `lsn_0001_foo` still match (0001 is a valid [a-z0-9]+ token).
 const ID_RE_LESSON = /^lsn_[a-z0-9]+(?:_[a-z0-9]+)+$/;
 const ID_RE_TEMPLATE = /^tmpl_[a-z0-9]+(?:_[a-z0-9]+)+$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -90,137 +92,27 @@ function fail(file, msg) {
   return false;
 }
 
-// Tiny YAML frontmatter parser — handles only what lessons actually use:
-// scalars, quoted strings, arrays of strings (inline + block), nested objects,
-// pipe-folded multiline strings (`field: |`). Rejects unsupported syntax loudly
-// so we never silently let through a malformed lesson.
+// Frontmatter parsing via gray-matter (real YAML — the same parser the
+// dashboard + source-of-truth validator use). Replaces a hand-rolled mini-
+// parser that diverged from real YAML (e.g. folded `>`/`>-` scalars) and
+// rejected lessons the dashboard had already accepted. Keep the {fm, body}
+// return shape so validate()/main() below stay unchanged.
 function parseFrontmatter(raw, file) {
-  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-  if (!m) {
-    fail(file, "missing or malformed frontmatter (expected --- ... --- block)");
+  let parsed;
+  try {
+    parsed = matter(raw);
+  } catch (err) {
+    fail(
+      file,
+      `frontmatter parse error: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
-  const [, fmText, body] = m;
-  const result = {};
-  const lines = fmText.split(/\r?\n/);
-
-  let i = 0;
-  // Stack of {indent, container} — root is { -1, result }.
-  const stack = [{ indent: -1, container: result, key: null }];
-
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim() === "" || line.trim().startsWith("#")) {
-      i++;
-      continue;
-    }
-
-    const indent = line.match(/^( *)/)[1].length;
-    const trimmed = line.slice(indent);
-
-    // Pop stack to current indent
-    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
-      stack.pop();
-    }
-    const top = stack[stack.length - 1];
-
-    // List item under current top.key
-    if (trimmed.startsWith("- ")) {
-      if (!top.key) {
-        fail(file, `unexpected list item at line ${i + 1}`);
-        return null;
-      }
-      const arr = top.container[top.key];
-      if (!Array.isArray(arr)) {
-        fail(file, `list item under non-array key '${top.key}' at line ${i + 1}`);
-        return null;
-      }
-      arr.push(stripQuotes(trimmed.slice(2).trim()));
-      i++;
-      continue;
-    }
-
-    const colon = trimmed.indexOf(":");
-    if (colon === -1) {
-      fail(file, `expected 'key: value' at line ${i + 1}: ${trimmed}`);
-      return null;
-    }
-    const key = trimmed.slice(0, colon).trim();
-    const rest = trimmed.slice(colon + 1).trim();
-
-    if (rest === "") {
-      // Either object or list follows on next indented lines
-      // Peek the next non-blank line to decide.
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() === "") j++;
-      const next = lines[j] ?? "";
-      const nextIndent = next.match(/^( *)/)[1].length;
-      const isList = next.slice(nextIndent).startsWith("- ");
-      const child = isList ? [] : {};
-      top.container[key] = child;
-      stack.push({ indent, container: child, key: null });
-      // For lists, the parent acts as the container *of* the array; we mark
-      // the key on the parent so list items push into top.container[top.key].
-      if (isList) {
-        // Re-push with parent semantics
-        stack.pop();
-        stack.push({ indent, container: top.container, key });
-      }
-      i++;
-      continue;
-    }
-
-    if (rest === "|" || rest === ">") {
-      // Block scalar: collect lines indented deeper than `indent`.
-      const collected = [];
-      let j = i + 1;
-      while (j < lines.length) {
-        const l = lines[j];
-        if (l.trim() === "") {
-          collected.push("");
-          j++;
-          continue;
-        }
-        const lIndent = l.match(/^( *)/)[1].length;
-        if (lIndent <= indent) break;
-        collected.push(l.slice(indent + 2));
-        j++;
-      }
-      top.container[key] =
-        rest === "|" ? collected.join("\n") : collected.join(" ").trim();
-      i = j;
-      continue;
-    }
-
-    if (rest.startsWith("[") && rest.endsWith("]")) {
-      const inner = rest.slice(1, -1).trim();
-      top.container[key] = inner === ""
-        ? []
-        : inner.split(",").map((s) => stripQuotes(s.trim()));
-      i++;
-      continue;
-    }
-
-    top.container[key] = coerceScalar(rest);
-    i++;
+  if (!parsed.data || Object.keys(parsed.data).length === 0) {
+    fail(file, "missing or empty frontmatter (expected --- ... --- block)");
+    return null;
   }
-
-  return { fm: result, body };
-}
-
-function stripQuotes(s) {
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    return s.slice(1, -1);
-  }
-  return s;
-}
-
-function coerceScalar(s) {
-  const stripped = stripQuotes(s);
-  if (/^-?\d+$/.test(stripped)) return Number(stripped);
-  if (stripped === "true") return true;
-  if (stripped === "false") return false;
-  return stripped;
+  return { fm: parsed.data, body: parsed.content };
 }
 
 function validate(file, fm, body, expectedTier) {
@@ -264,7 +156,12 @@ function validate(file, fm, body, expectedTier) {
       "gotchas must be an array of strings");
   }
   if (fm.last_validated_at !== undefined) {
-    need(typeof fm.last_validated_at === "string" && ISO_DATE_RE.test(fm.last_validated_at),
+    // gray-matter/js-yaml may parse an unquoted YYYY-MM-DD as a Date object.
+    const lv =
+      fm.last_validated_at instanceof Date
+        ? fm.last_validated_at.toISOString().slice(0, 10)
+        : fm.last_validated_at;
+    need(typeof lv === "string" && ISO_DATE_RE.test(lv),
       `last_validated_at must be ISO date YYYY-MM-DD (got: ${fm.last_validated_at})`);
   }
   if (fm.upvotes !== undefined) {
