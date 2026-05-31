@@ -144,8 +144,7 @@ accidental `supabase link` from the wrong cwd combination.
 
 ## Related vetted conventions
 
-Same shape as [[lsn_npx_tsc_cwd_fallback]] and
-[[lsn_0004_npx_tsc_wrong_cwd_silent_zero_errors]] — a CLI tool
+Same shape as [[lsn_npx_tsc_cwd_fallback]] — a CLI tool
 silently does the wrong thing because cwd doesn't match the project
 root, and the failure mode looks like a legitimate diagnostic
 instead of "you're in the wrong directory."
