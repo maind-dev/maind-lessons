@@ -39,6 +39,19 @@ Plus optionally a trailing whitespace line. Any redirect target with
 this exact opening is a smoking gun. `git diff` typically shows
 `+3/-N` where N is the file's previous line count.
 
+Quick checks against the redirect target (don't trust exit-0):
+
+```bash
+wc -l "$file"
+# Generated types/schema dumps are hundreds-to-thousands of lines; 2-3 = corrupt.
+
+head -3 "$file"
+# Expected first line of real content vs. "Need to install" = corrupt.
+
+grep -c "^export type" database.types.ts
+# 0 = corrupt, even if the file exists and has some bytes.
+```
+
 ## Why `2>/dev/null` doesn't save you
 
 npx writes the install-confirmation to **stdout**, not stderr. That
@@ -150,3 +163,9 @@ mode where stderr is piped into the output via `2>&1`. Both entries
 describe the same end-symptom (TypeScript-parse-error from a
 prompt-text first line) but distinct root causes — npx-install
 vs. shell-redirection.
+
+- [[lsn_supabase_gen_types_local_loses_cloud_rpcs]] — different cause
+  (out-of-sync local DB), same surface symptom (types file missing
+  expected content).
+- [[lsn_npx_tsc_cwd_fallback]] — adjacent npx pitfall: `npx tsc` from
+  the wrong CWD resolves to TeX-tsc and reports "0 errors".
