@@ -24,4 +24,4 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Validate lesson frontmatter + injection scan
-        run: node scripts/validate.mjs --dir lessons:community
+        run: node scripts/validate.mjs

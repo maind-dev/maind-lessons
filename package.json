@@ -4,12 +4,13 @@
   "private": true,
   "description": "Community-maintained library of debugging lessons and workflow notes for AI coding agents.",
   "scripts": {
-    "validate": "node scripts/validate.mjs --dir lessons:community"
+    "validate": "node scripts/validate.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@maind-dev/content-schemas": "0.1.0",
     "gray-matter": "4.0.3"
   }
 }
