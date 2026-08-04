@@ -1,49 +1,51 @@
 #!/usr/bin/env node
-// Validator for lesson Markdown files. Standalone (no app deps) so it can
-// also run in the future maind-lessons{,-curated} repo's GH Action without
-// pulling in the whole monorepo.
+// Validates every lesson in this repository against the REAL Zod schema
+// (@maind-dev/content-schemas) — the exact definition the maind MCP server
+// loads lessons with — plus the injection-pattern scan (STRATEGY.md §7).
 //
-// Usage:
-//   node scripts/validate-lessons.mjs                       # multi-dir mode (ADR-036)
-//   node scripts/validate-lessons.mjs <dir>                 # single-dir mode (legacy)
-//   node scripts/validate-lessons.mjs --dir <path>:<tier>   # explicit, repeatable
+// This replaces the previous hand-built re-implementation of the lesson
+// schema. That validator was deliberately dependency-free so this repo could
+// build without the monorepo — reasonable at the time, but it meant the
+// schema existed twice and the copies could drift silently. Since the schemas
+// are published, this repo validates with the same source of truth.
 //
-// In multi-dir mode the script scans both ./data/lessons-community (expected
-// tier=community) and ./data/lessons-curated (expected tier=curated).
-// Path-Heuristik (ADR-036): the directory bucket determines the expected tier;
-// the lesson is rejected if frontmatter declares a different tier.
+// Why structural validity matters this much: a lesson that does not parse
+// against the real schema does not crash the server. Its store catches the
+// error, logs one stderr line, and loads the rest — the entry sits in this
+// repo looking fine and silently reaches no user. This run makes that a red
+// PR check instead.
 //
-// Always also runs an injection-pattern scan (ADR-036/STRATEGY.md §7) on the
-// body of every lesson and rejects matches.
+// The authoritative, always-current gate still runs in the maind monorepo
+// (content-bundle workflow + Docker deploy gate) against the monorepo's
+// CURRENT schemas. This run is the fast local feedback at PR time; the pin in
+// package.json says exactly which schema release it checks against.
 //
-// Exits non-zero on first invalid lesson or first injection match.
+// Usage:  node scripts/validate.mjs
 
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { argv, exit } from "node:process";
+import { readdir, readFile } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
+import { LessonSchema } from "@maind-dev/content-schemas";
 
-const ALLOWED_TYPES = new Set([
-  "debugging_lesson",
-  "workflow_best_practice",
-  "recipe",
-  "template",
-]);
-const ALLOWED_TIERS = new Set(["community", "curated"]);
-// Slug-based IDs (numbering deprecated; the leading \d{4}_ requirement was a
-// legacy convention not carried over everywhere). Pattern matches the active
-// system convention (MCP tools.ts, dashboard actions): lsn_/tmpl_ + at least
-// two underscore-separated lowercase-alnum tokens. Legacy numbered IDs like
-// `lsn_0001_foo` still match (0001 is a valid [a-z0-9]+ token).
-const ID_RE_LESSON = /^lsn_[a-z0-9]+(?:_[a-z0-9]+)+$/;
-const ID_RE_TEMPLATE = /^tmpl_[a-z0-9]+(?:_[a-z0-9]+)+$/;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const SKIP_FILES = new Set(["readme.md"]);
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Bucket → schema, exactly as the server maps directories to content classes.
+ * `expectedTier` keeps the ADR-036 path heuristic: a lesson living in this
+ * repo IS curated; frontmatter claiming otherwise is a mistake the schema
+ * alone cannot see (both tiers are valid lesson shapes).
+ */
+const BUCKETS = [
+  { dir: "lessons", schema: LessonSchema, label: "lesson", expectedTier: "community" },
+];
 
 // ── Injection-Pattern-Scan (STRATEGY.md §7 Risiko 1+2) ─────────────────
-// Heuristic: catches the most common prompt-injection and remote-code patterns
-// in lesson bodies. False-positive rate is non-zero — escape valid uses with
-// `<noinject>…</noinject>` markers (stripped before scanning).
+// Carried over verbatim from the previous validator. The same five patterns
+// live in the curated repo's validator — two deliberate copies, one per
+// content repo, so each stays self-contained; if they ever need to change,
+// centralising them in @maind-dev/content-schemas is the move. Escape valid
+// uses with <noinject>…</noinject>.
 const INJECTION_PATTERNS = [
   {
     id: "ignore-previous",
@@ -72,224 +74,73 @@ const INJECTION_PATTERNS = [
   },
 ];
 
-function scanInjection(file, body) {
+function scanInjection(body) {
   const cleaned = body.replace(/<noinject>[\s\S]*?<\/noinject>/g, "");
-  const hits = [];
-  for (const p of INJECTION_PATTERNS) {
-    if (p.re.test(cleaned)) hits.push(p);
-  }
-  if (hits.length > 0) {
-    for (const h of hits) {
-      console.error(`✗ ${file}: injection-scan flagged '${h.id}': ${h.msg}`);
-    }
-    return false;
-  }
-  return true;
+  return INJECTION_PATTERNS.filter((p) => p.re.test(cleaned));
 }
 
-function fail(file, msg) {
-  console.error(`✗ ${file}: ${msg}`);
-  return false;
-}
+let checked = 0;
+const failures = [];
 
-// Frontmatter parsing via gray-matter (real YAML — the same parser the
-// dashboard + source-of-truth validator use). Replaces a hand-rolled mini-
-// parser that diverged from real YAML (e.g. folded `>`/`>-` scalars) and
-// rejected lessons the dashboard had already accepted. Keep the {fm, body}
-// return shape so validate()/main() below stay unchanged.
-function parseFrontmatter(raw, file) {
-  let parsed;
-  try {
-    parsed = matter(raw);
-  } catch (err) {
-    fail(
-      file,
-      `frontmatter parse error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return null;
-  }
-  if (!parsed.data || Object.keys(parsed.data).length === 0) {
-    fail(file, "missing or empty frontmatter (expected --- ... --- block)");
-    return null;
-  }
-  return { fm: parsed.data, body: parsed.content };
-}
-
-function validate(file, fm, body, expectedTier) {
-  let ok = true;
-  function need(cond, msg) {
-    if (!cond) ok = fail(file, msg);
-  }
-
-  // ID-Regex je nach type (ADR-038): templates → tmpl_NNNN_*, sonst lsn_NNNN_*
-  const idRe = fm.type === "template" ? ID_RE_TEMPLATE : ID_RE_LESSON;
-  need(typeof fm.id === "string" && idRe.test(fm.id),
-    `id must match ${idRe} (got: ${JSON.stringify(fm.id)})`);
-  need(typeof fm.title === "string" && fm.title.length > 0 && fm.title.length <= 200,
-    "title required (1-200 chars)");
-  need(ALLOWED_TYPES.has(fm.type),
-    `type must be one of: ${[...ALLOWED_TYPES].join(", ")} (got: ${fm.type})`);
-  need(ALLOWED_TIERS.has(fm.tier),
-    `tier must be one of: ${[...ALLOWED_TIERS].join(", ")} (got: ${fm.tier})`);
-
-  // ADR-036 Path-Heuristik: directory dictates tier
-  if (expectedTier && fm.tier !== expectedTier) {
-    need(false,
-      `tier mismatch: file lives in ${expectedTier} bucket but frontmatter says '${fm.tier}'`);
-  }
-
-  need(fm.context && typeof fm.context === "object", "context block required");
-  if (fm.context && typeof fm.context === "object") {
-    for (const k of ["tools", "languages", "platforms", "tags"]) {
-      if (fm.context[k] !== undefined) {
-        need(Array.isArray(fm.context[k]) && fm.context[k].every((v) => typeof v === "string"),
-          `context.${k} must be an array of strings`);
-      }
-    }
-  }
-
-  need(typeof fm.summary === "string" && fm.summary.length > 0 && fm.summary.length <= 500,
-    "summary required (1-500 chars)");
-
-  if (fm.gotchas !== undefined) {
-    need(Array.isArray(fm.gotchas) && fm.gotchas.every((g) => typeof g === "string"),
-      "gotchas must be an array of strings");
-  }
-  if (fm.last_validated_at !== undefined) {
-    // gray-matter/js-yaml may parse an unquoted YYYY-MM-DD as a Date object.
-    const lv =
-      fm.last_validated_at instanceof Date
-        ? fm.last_validated_at.toISOString().slice(0, 10)
-        : fm.last_validated_at;
-    need(typeof lv === "string" && ISO_DATE_RE.test(lv),
-      `last_validated_at must be ISO date YYYY-MM-DD (got: ${fm.last_validated_at})`);
-  }
-  if (fm.upvotes !== undefined) {
-    need(Number.isInteger(fm.upvotes) && fm.upvotes >= 0,
-      "upvotes must be a non-negative integer");
-  }
-
-  // Template-specific (ADR-038): type=template requires template_body + target_file
-  if (fm.type === "template") {
-    need(typeof fm.template_body === "string" && fm.template_body.trim().length > 0,
-      "type=template requires non-empty 'template_body' frontmatter field");
-    need(typeof fm.target_file === "string" && fm.target_file.trim().length > 0,
-      "type=template requires 'target_file' (e.g. CLAUDE.md, AGENTS.md, .cursorrules)");
-  }
-
-  need(typeof body === "string" && body.trim().length > 0,
-    "body (text after frontmatter) must not be empty");
-
-  return ok && scanInjection(file, body);
-}
-
-function parseArgs(args) {
-  // Returns array of {dir, tier|null}.
-  // Modes:
-  //   no args                  → multi-dir defaults (lessons-community + lessons-curated + templates)
-  //   single positional        → legacy single-dir, tier from frontmatter
-  //   --dir path:tier (repeat) → explicit list
-  const explicit = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--dir" && args[i + 1]) {
-      const [path, tier] = args[i + 1].split(":");
-      if (tier && !ALLOWED_TIERS.has(tier)) {
-        console.error(`Bad --dir tier '${tier}'; expected community|curated`);
-        exit(2);
-      }
-      explicit.push({ dir: path, tier: tier ?? null });
-      i++;
-    } else if (!args[i].startsWith("--")) {
-      explicit.push({ dir: args[i], tier: null });
-    }
-  }
-  if (explicit.length > 0) return explicit;
-  return [
-    { dir: "./data/lessons-community", tier: "community" },
-    { dir: "./data/lessons-curated", tier: "curated" },
-    { dir: "./data/templates", tier: "curated" }, // ADR-038: templates always curated
-  ];
-}
-
-async function listMd(dir) {
+for (const { dir, schema, label, expectedTier } of BUCKETS) {
   let entries;
   try {
-    entries = await readdir(dir);
-  } catch (err) {
-    return { ok: false, error: err.message };
+    entries = await readdir(join(ROOT, dir));
+  } catch {
+    console.log(`(no ${dir}/ directory — skipping)`);
+    continue;
   }
-  const out = [];
-  for (const f of entries) {
-    if (!f.endsWith(".md")) continue;
-    if (SKIP_FILES.has(f.toLowerCase())) continue;
-    const path = join(dir, f);
-    const s = await stat(path);
-    if (s.isFile()) out.push(f);
+  const files = entries
+    .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
+    .sort();
+
+  let ok = 0;
+  for (const file of files) {
+    checked += 1;
+    const raw = await readFile(join(ROOT, dir, file), "utf-8");
+    const problems = [];
+
+    let parsed;
+    try {
+      parsed = matter(raw);
+    } catch (err) {
+      problems.push(`frontmatter unreadable: ${err instanceof Error ? err.message : err}`);
+    }
+
+    if (parsed) {
+      // The exact payload shape the server builds at load time.
+      const result = schema.safeParse({ ...parsed.data, body: parsed.content.trim() });
+      if (!result.success) {
+        for (const i of result.error.issues) {
+          problems.push(`${i.path.length ? i.path.join(".") : "(root)"}: ${i.message}`);
+        }
+      }
+      if (expectedTier && parsed.data?.tier !== expectedTier) {
+        problems.push(
+          `tier mismatch: file lives in the ${expectedTier} bucket but frontmatter says '${parsed.data?.tier}'`,
+        );
+      }
+      for (const hit of scanInjection(parsed.content)) {
+        problems.push(`injection scan [${hit.id}]: ${hit.msg} — escape a legitimate use with <noinject>…</noinject>`);
+      }
+    }
+
+    if (problems.length > 0) failures.push({ path: `${dir}/${file}`, problems });
+    else ok += 1;
   }
-  return { ok: true, files: out.sort() };
+  console.log(`${failures.some((f) => f.path.startsWith(dir + "/")) ? "✗" : "✓"} ${dir}: ${ok}/${files.length} valid as ${label}`);
 }
 
-async function main() {
-  const buckets = parseArgs(argv.slice(2)).map((b) => ({
-    ...b,
-    dir: resolve(b.dir),
-  }));
-
-  let allOk = true;
-  let total = 0;
-  const seenIds = new Set();
-
-  for (const bucket of buckets) {
-    const list = await listMd(bucket.dir);
-    if (!list.ok) {
-      // Empty/missing dir is OK in multi-dir mode — community may not yet have lessons.
-      if (buckets.length > 1) {
-        console.error(`(skip) ${bucket.dir}: ${list.error}`);
-        continue;
-      }
-      console.error(`Cannot read ${bucket.dir}: ${list.error}`);
-      exit(2);
-    }
-    if (list.files.length === 0) {
-      console.error(`(empty) ${bucket.dir}`);
-      continue;
-    }
-
-    for (const file of list.files) {
-      const path = join(bucket.dir, file);
-      const raw = await readFile(path, "utf-8");
-      const parsed = parseFrontmatter(raw, file);
-      if (!parsed) {
-        allOk = false;
-        continue;
-      }
-      if (!validate(file, parsed.fm, parsed.body, bucket.tier)) {
-        allOk = false;
-        continue;
-      }
-      if (seenIds.has(parsed.fm.id)) {
-        fail(file, `duplicate id: ${parsed.fm.id}`);
-        allOk = false;
-        continue;
-      }
-      seenIds.add(parsed.fm.id);
-      total++;
-      console.log(`✓ ${bucket.tier ?? "?"}/${file}`);
-    }
+if (failures.length > 0) {
+  console.error(`\n${failures.length} of ${checked} file(s) failed:`);
+  for (const { path, problems } of failures) {
+    console.error(`  ${path}`);
+    for (const p of problems) console.error(`    · ${p}`);
   }
-
-  if (!allOk) {
-    console.error(`\nValidation failed.`);
-    exit(1);
-  }
-  if (total === 0) {
-    console.error(`No lessons found in any bucket.`);
-    exit(2);
-  }
-  console.log(`\nAll ${total} lessons valid.`);
+  console.error(
+    "\nA file that fails the schema does not error at runtime — the server skips it" +
+      "\nsilently and it reaches no user. Fix before merging.",
+  );
+  process.exit(1);
 }
-
-main().catch((err) => {
-  console.error(err);
-  exit(2);
-});
+console.log(`\nAll ${checked} files valid against @maind-dev/content-schemas.`);
