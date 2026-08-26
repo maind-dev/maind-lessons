@@ -1,15 +1,16 @@
-Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+(CC BY-NC-SA 4.0)
 
-Copyright (c) 2026 maind contributors
+Copyright (c) 2026 MAIND contributors
 
 This license applies to the **lesson content** in this repository: all files
 under `lessons/` and any derivative documentation that quotes from those files.
 
 The full legal text is available at:
-  https://creativecommons.org/licenses/by-sa/4.0/legalcode
+  https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
 A human-readable summary is at:
-  https://creativecommons.org/licenses/by-sa/4.0/
+  https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 In short:
 
@@ -17,6 +18,12 @@ In short:
   the license, and indicate if changes were made. You may do so in any
   reasonable manner, but not in any way that suggests the licensor endorses
   you or your use.
+
+- **NonCommercial (NC)** — You may not use the material for commercial
+  purposes under this license. Commercial use is available separately:
+  content delivered through the MAIND service (https://maind.dev) may be
+  used according to your plan tier as set out in the MAIND Terms of Service
+  (https://maind.dev/terms); other commercial licensing on request.
 
 - **ShareAlike (SA)** — If you remix, transform, or build upon the material,
   you must distribute your contributions under the same license as the
@@ -26,12 +33,16 @@ In short:
   technological measures that legally restrict others from doing anything the
   license permits.
 
+Prior versions: lesson content published in this repository before
+2026-08-26 was licensed under CC BY-SA 4.0; that grant remains valid for
+those copies.
+
 ## Promotion to curated
 
 Maintainers may select community lessons for editorial revision into the
 curated tier (separate proprietary repository, see `CONTRIBUTING.md` and
 the maind privacy/terms documentation). The original community version
-remains under CC BY-SA 4.0 here; the redacted curated version may be
+remains under CC BY-NC-SA 4.0 here; the redacted curated version may be
 distributed under the proprietary terms of the curated repository.
 
 When a lesson is promoted, the curated version retains an `attribution`
@@ -41,9 +52,11 @@ author, and source repository — preserving Stack-Overflow-style attribution.
 ## Tooling vs. content
 
 The **tooling** in this repository (under `scripts/`, `.github/`, `schema/`,
-and root configuration files) is licensed under MIT — see `LICENSE`.
+and root configuration files) is licensed under PolyForm Noncommercial
+1.0.0 — see `LICENSE`.
 
 By contributing to this repository, you license your contribution under
-CC BY-SA 4.0 (for content under `lessons/`) and MIT (for any tooling changes),
-as attested by your `Signed-off-by:` Developer Certificate of Origin in each
-commit (see `CONTRIBUTING.md`).
+CC BY-NC-SA 4.0 (for content under `lessons/`) and PolyForm Noncommercial
+1.0.0 (for any tooling changes), and you grant MAIND, Inc. the service
+grant described in `CONTRIBUTING.md`, as attested by your `Signed-off-by:`
+Developer Certificate of Origin in each commit.

@@ -45,15 +45,24 @@ with the next MCP-server deploy.
 
 ## License
 
-Dual-licensed (see ADR-037 in the maind workspace):
+Dual-licensed, **noncommercial by default** (see ADR-305 in the maind
+workspace; supersedes the ADR-037 licensing):
 
-- **Tooling** (`scripts/`, `schema/`, `.github/workflows/`, root config) — MIT.
-  See [`LICENSE`](./LICENSE).
-- **Lesson content** (`lessons/`) — Creative Commons BY-SA 4.0. See
+- **Tooling** (`scripts/`, `schema/`, `.github/workflows/`, root config) —
+  PolyForm Noncommercial 1.0.0. See [`LICENSE`](./LICENSE).
+- **Lesson content** (`lessons/`) — Creative Commons BY-NC-SA 4.0. See
   [`LICENSE-CONTENT`](./LICENSE-CONTENT).
 
-By opening a PR you agree your contribution is licensed under those terms.
-Each commit must carry a `Signed-off-by:` trailer attesting the
+**Commercial use** is available through the MAIND service: users of
+maind.dev may use served content according to their plan tier under the
+[MAIND Terms of Service](https://maind.dev/terms); other commercial
+licensing on request. Repository states published before 2026-08-26 were
+MIT / CC BY-SA 4.0; those grants remain valid for those copies.
+
+By opening a PR you agree your contribution is licensed under those terms,
+including the MAIND service grant described in
+[`CONTRIBUTING.md`](./CONTRIBUTING.md). Each commit must carry a
+`Signed-off-by:` trailer attesting the
 [Developer Certificate of Origin](https://developercertificate.org/) — use
 `git commit -s`. CI enforces this.
 
@@ -62,7 +71,7 @@ Each commit must carry a `Signed-off-by:` trailer attesting the
 Maintainers may select community lessons for editorial revision into the
 proprietary `maind-lessons-curated` repository (the curated tier visible to
 paid plans). The original community lesson stays in this repository under
-CC BY-SA 4.0; the redacted curated version retains an `attribution`
+CC BY-NC-SA 4.0; the redacted curated version retains an `attribution`
 frontmatter block crediting the original author.
 
 ## Code of Conduct
