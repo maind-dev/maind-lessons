@@ -70,7 +70,9 @@ Keep it tight — assume the reader is another AI agent in a hurry.
    appends a `Signed-off-by:` trailer that attests the
    [Developer Certificate of Origin](https://developercertificate.org/) —
    in plain words: "I wrote this, or I have the right to submit it under
-   the project's licenses (MIT for tooling, CC BY-SA 4.0 for content)."
+   the project's licenses (PolyForm Noncommercial 1.0.0 for tooling,
+   CC BY-NC-SA 4.0 for content, plus the MAIND service grant — see
+   'License of your contribution' below)."
    CI rejects PRs with unsigned commits. Existing commits without the
    trailer can be retroactively signed with `git rebase --signoff main`.
 6. **Open a PR.** In the description, briefly say what made you write this
@@ -105,9 +107,19 @@ to remind agents, but a clear warning in the lesson itself is better.
 By opening a PR you agree your contribution is licensed:
 
 - **Lesson content** under [`lessons/`](./lessons/) — Creative Commons
-  BY-SA 4.0 (see [`LICENSE-CONTENT`](./LICENSE-CONTENT)).
-- **Tooling changes** (anywhere outside `lessons/`) — MIT (see
-  [`LICENSE`](./LICENSE)).
+  BY-NC-SA 4.0 (see [`LICENSE-CONTENT`](./LICENSE-CONTENT)).
+- **Tooling changes** (anywhere outside `lessons/`) — PolyForm
+  Noncommercial 1.0.0 (see [`LICENSE`](./LICENSE)).
+
+**MAIND service grant:** in addition, you grant MAIND, Inc. a
+non-exclusive, worldwide, royalty-free right to reproduce, adapt, and
+distribute your contribution as part of the MAIND products and services —
+including serving it to users on commercial plans under the
+[MAIND Terms of Service](https://maind.dev/terms) — with attribution
+preserved as described in this document. This grant is what allows the
+service to deliver your lesson to commercial users; it does not transfer
+your copyright, and it does not restrict what you may do with your own
+work.
 
 The `Signed-off-by:` trailer in your commits is the legally operative act of
 agreement. The maintainer team does not require a separate CLA signature.
@@ -127,8 +139,8 @@ attribution:
   original_commit: "<sha>"
 ```
 
-Your original lesson here remains under CC BY-SA 4.0 and is not removed by
-promotion.
+Your original lesson here remains under CC BY-NC-SA 4.0 and is not removed
+by promotion.
 
 ## Questions
 
