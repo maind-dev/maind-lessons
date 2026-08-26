@@ -1,12 +1,11 @@
 name: Validate lessons
 
+# Kein paths-Filter am pull_request-Trigger: validate ist Required-Check der
+# Branch-Protection — mit Filter bleibt jeder PR ausserhalb der Pfade (z.B.
+# LICENSE/README) dauerhaft BLOCKED, weil der Check nie startet (2026-08-26,
+# PR #373). Der Lauf ist billig; er validiert ohnehin das ganze lessons/.
 on:
   pull_request:
-    paths:
-      - "lessons/**"
-      - "scripts/validate.mjs"
-      - "package.json"
-      - ".github/workflows/validate.yml"
   push:
     branches: [main]
 
