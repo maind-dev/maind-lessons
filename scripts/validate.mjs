@@ -28,6 +28,25 @@ import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import { LessonSchema } from "@maind-dev/content-schemas";
 
+// MAIND-1549 — front matter is data. gray-matter picks its engine from the word
+// behind the opening delimiter; `---js` selects one that EVALUATES the block,
+// and any other word is looked up as a property of a plain object. This script
+// reads files other people wrote: only YAML and JSON name a language, and the
+// script engines are replaced by one that refuses.
+function parseFrontMatter(raw) {
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  let language = "";
+  if (text.startsWith("---") && text.charAt(3) !== "-") {
+    const rest = text.slice(3);
+    language = rest.slice(0, rest.search(/\r?\n/)).trim();
+  }
+  const refuse = () => {
+    throw new Error(`front matter language ${JSON.stringify(language.slice(0, 40))} is not supported: front matter is YAML or JSON data`);
+  };
+  if (language !== "" && language !== "json" && !/^ya?ml$/i.test(language)) refuse();
+  return matter(raw, { engines: { javascript: { parse: refuse, stringify: refuse }, coffee: { parse: refuse, stringify: refuse } } });
+}
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
@@ -91,7 +110,7 @@ for (const { dir, schema, label, expectedTier } of BUCKETS) {
     continue;
   }
   const files = entries
-    .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
+    .filter((f) => /\.md$/i.test(f) && f.toLowerCase() !== "readme.md")
     .sort();
 
   let ok = 0;
@@ -102,7 +121,7 @@ for (const { dir, schema, label, expectedTier } of BUCKETS) {
 
     let parsed;
     try {
-      parsed = matter(raw);
+      parsed = parseFrontMatter(raw);
     } catch (err) {
       problems.push(`frontmatter unreadable: ${err instanceof Error ? err.message : err}`);
     }
